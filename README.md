@@ -16,7 +16,7 @@ Easily manage and open your most-used dev projects with a slick TUI interface.
 
 ---
 
-## 📥 Installation
+## 📥 Installation (GNU/Linux only)
 
 To install the latest version:
 
@@ -65,33 +65,6 @@ You can move it to a directory in your `PATH`:
 ```bash
 cp target/release/nodash /usr/local/bin/
 ```
-
----
-
-## 📦 Releasing a New Version
-
-To release a new version (e.g. `v1.2.3`):
-
-1. Bump the version in `Cargo.toml`.
-2. Commit and tag it:
-
-   ```bash
-   git commit -am "release: v1.2.3"
-   git tag v1.2.3
-   git push && git push --tags
-   ```
-
-3. Create GitHub release with binaries:
-
-   - Build binaries for:
-
-     - `linux-x86_64`
-     - `linux-arm64`
-     - `macos-x86_64`
-     - `macos-arm64`
-
-   - Name them like: `nodash-linux-x86_64`, etc.
-   - Upload to the GitHub release.
 
 ---
 
