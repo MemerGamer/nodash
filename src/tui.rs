@@ -30,7 +30,7 @@ where
         terminal.draw(|f| {
             let chunks = Layout::default()
                 .constraints([Constraint::Min(5), Constraint::Length(3)].as_ref())
-                .split(f.size());
+                .split(f.area());
 
             let items: Vec<ListItem> = projects.iter().enumerate().map(|(i, p)| {
                 let mut line = format!("{}: {}", i + 1, p.name);
