@@ -1,5 +1,7 @@
 # nodash
 
+![demo.png](demo.png)
+
 `nodash` is a modern terminal-based project launcher and manager for nvm node projects — fast, minimal, and built with Rust.
 
 Easily manage and open your most-used dev projects with a slick TUI interface.
