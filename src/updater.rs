@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::io::{self};
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 use crate::VERSION;
@@ -13,7 +14,7 @@ pub fn check_for_update() -> io::Result<()> {
     if latest_version != VERSION {
         println!("Updating from version {} to {}", VERSION, latest_version);
         download_and_replace_binary(&latest_version)?;
-        println!("Updated successfully.");
+        println!("✅ Updated successfully to {}", latest_version);
     } else {
         println!("You are already running the latest version: {}", VERSION);
     }
@@ -55,29 +56,15 @@ fn get_latest_release_version() -> io::Result<String> {
 }
 
 fn download_and_replace_binary(version: &str) -> io::Result<()> {
-    let arch = match env::consts::ARCH {
-        "x86_64" => "x86_64",
-        "aarch64" => "arm64",
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unsupported architecture",
-            ));
-        }
-    };
-
-    let os = match env::consts::OS {
-        "linux" => "linux",
-        "macos" => "macos",
-        _ => return Err(io::Error::new(io::ErrorKind::Other, "Unsupported OS")),
-    };
-
+    let filename = format!("nodash-linux-v{}", version);
     let url = format!(
-        "https://github.com/{}/releases/download/v{}/nodash-{}-{}",
-        REPO, version, os, arch
+        "https://github.com/{}/releases/download/v{}/{}",
+        REPO, version, filename
     );
 
     let tmp_path = env::temp_dir().join("nodash-update");
+    println!("⬇️  Downloading: {}", url);
+
     let status = Command::new("curl")
         .args(&["-L", "-o"])
         .arg(&tmp_path)
@@ -88,12 +75,29 @@ fn download_and_replace_binary(version: &str) -> io::Result<()> {
         return Err(io::Error::new(io::ErrorKind::Other, "Download failed"));
     }
 
+    println!("🔐 Making binary executable...");
+    fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o755))?;
+
     let current_path = env::current_exe()?;
-    fs::copy(&tmp_path, &current_path).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("Failed to replace binary at {:?}: {}", current_path, e),
-        )
-    })?;
+    println!("⚙️  Replacing binary at {:?}", current_path);
+
+    // Move with sudo if not writable
+    let result = fs::copy(&tmp_path, &current_path);
+    if let Err(_) = result {
+        println!("🔒 Permission denied. Retrying with sudo...");
+        let status = Command::new("sudo")
+            .arg("mv")
+            .arg(&tmp_path)
+            .arg(&current_path)
+            .status()?;
+
+        if !status.success() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "sudo mv failed",
+            ));
+        }
+    }
+
     Ok(())
 }
