@@ -21,5 +21,5 @@ sudo mv nodash "$INSTALL_PATH"
 echo "✅ nodash $VERSION installed successfully!"
 echo "👉 Run with: nodash"
 
-echo "🔄 To update nodash, run:
+echo "🔄 To update nodash, run:"
 echo "nodash update"
