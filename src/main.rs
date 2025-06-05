@@ -9,8 +9,7 @@ use crate::tui::run_app;
 use crate::updater::check_for_update;
 use std::io;
 
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
+pub const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
