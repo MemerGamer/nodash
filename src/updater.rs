@@ -3,8 +3,13 @@ use std::fs;
 use std::io::{self};
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+use serde::Deserialize;
 
 use crate::VERSION;
+#[derive(Deserialize)]
+struct Release {
+    tag_name: String,
+}
 
 const REPO: &str = "MemerGamer/nodash";
 
@@ -22,45 +27,31 @@ pub fn check_for_update() -> io::Result<()> {
     Ok(())
 }
 
+
 fn get_latest_release_version() -> io::Result<String> {
     let output = Command::new("curl")
-        .arg("-s")
-        .arg(format!(
-            "https://api.github.com/repos/{}/releases/latest",
-            REPO
-        ))
+        .args(&["-s", &format!("https://api.github.com/repos/{}/releases/latest", REPO)])
         .output()?;
-
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Failed to fetch latest release info",
-        ));
+        return Err(io::Error::new(io::ErrorKind::Other, "Failed to fetch release info"));
     }
 
-    let json = String::from_utf8_lossy(&output.stdout);
-    let version = json
-        .lines()
-        .find(|line| line.trim_start().starts_with("\"tag_name\":"))
-        .and_then(|line| {
-            line.split(':')
-                .nth(1)?
-                .trim()
-                .trim_matches('"')
-                .strip_prefix('v')
-                .map(String::from)
-        })
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to parse release version"))?;
+    let release: Release = serde_json::from_slice(&output.stdout)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("JSON parse error: {}", e)))?;
+    let version = release.tag_name
+        .strip_prefix('v')
+        .map(|s| s.to_string())
+        .unwrap_or(release.tag_name);
 
     Ok(version)
 }
 
+
 fn download_and_replace_binary(version: &str) -> io::Result<()> {
     let version = version.trim();
-    let filename = format!("nodash-linux-v{}", version);
     let url = format!(
-        "https://github.com/{}/releases/download/v{}/{}",
-        REPO, version, filename
+        "https://github.com/{}/releases/download/v{}/nodash-linux-v{}",
+        REPO.trim(), version, version
     );
 
     // Debug output to verify the URL is correct
