@@ -56,14 +56,17 @@ fn get_latest_release_version() -> io::Result<String> {
 }
 
 fn download_and_replace_binary(version: &str) -> io::Result<()> {
+    let version = version.trim();
     let filename = format!("nodash-linux-v{}", version);
     let url = format!(
         "https://github.com/{}/releases/download/v{}/{}",
         REPO, version, filename
     );
 
-    let tmp_path = env::temp_dir().join("nodash-update");
+    // Debug output to verify the URL is correct
     println!("⬇️  Downloading: {}", url);
+
+    let tmp_path = env::temp_dir().join("nodash-update");
 
     let status = Command::new("curl")
         .args(&["-L", "-o"])
@@ -81,21 +84,22 @@ fn download_and_replace_binary(version: &str) -> io::Result<()> {
     let current_path = env::current_exe()?;
     println!("⚙️  Replacing binary at {:?}", current_path);
 
-    // Move with sudo if not writable
-    let result = fs::copy(&tmp_path, &current_path);
-    if let Err(_) = result {
-        println!("🔒 Permission denied. Retrying with sudo...");
-        let status = Command::new("sudo")
-            .arg("mv")
-            .arg(&tmp_path)
-            .arg(&current_path)
-            .status()?;
+    match fs::copy(&tmp_path, &current_path) {
+        Ok(_) => {}
+        Err(_) => {
+            println!("🔒 Permission denied. Retrying with sudo...");
+            let status = Command::new("sudo")
+                .arg("mv")
+                .arg(&tmp_path)
+                .arg(&current_path)
+                .status()?;
 
-        if !status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "sudo mv failed",
-            ));
+            if !status.success() {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "sudo mv failed",
+                ));
+            }
         }
     }
 
