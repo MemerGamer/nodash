@@ -18,15 +18,22 @@ Easily manage and open your most-used dev projects with a slick TUI interface.
 
 ---
 
-## 📥 Installation (GNU/Linux only)
+## 📥 Installation
+
+### General GNU/Linux
 
 To install the latest version:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/MemerGamer/nodash/main/install.sh | bash
 ```
-
 > Requires `curl` and `sudo` to move the binary to `/usr/local/bin`.
+
+### Arch Linux
+
+```bash
+yay nodash-bin
+```
 
 ---
 
