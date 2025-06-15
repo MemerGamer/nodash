@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use serde::Deserialize;
 
-use crate::VERSION;
+use crate::version::VERSION;
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,

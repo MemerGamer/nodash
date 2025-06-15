@@ -1,4 +1,4 @@
-use crate::project::Project;
+use crate::project::{Project, detect_node_version};
 use chrono::Utc;
 use std::env;
 use std::io;
@@ -62,6 +62,9 @@ fn command_exists(cmd: &str) -> bool {
 
 pub fn open_project(proj: &mut Project) -> io::Result<()> {
     proj.last_opened = Some(Utc::now());
+
+    // Update node version when opening project
+    proj.node_version = detect_node_version(&proj.path).ok();
 
     let shell = get_current_shell();
 
