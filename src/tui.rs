@@ -2,13 +2,20 @@ use crossterm::event::{Event, KeyCode};
 use crossterm::{event, execute, terminal};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Style};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 use crate::project::{Project, detect_node_version, save_projects};
+
+const HIGHLIGHT_COLOR: Color = Color::LightCyan;
+const ACCENT_COLOR: Color = Color::LightGreen;
+const TEXT_COLOR: Color = Color::White;
+const MUTED_COLOR: Color = Color::DarkGray;
+const ERROR_COLOR: Color = Color::Red;
 
 pub fn run_app<F>(projects: &mut Vec<Project>, mut open_cb: F) -> io::Result<()>
 where
@@ -30,7 +37,6 @@ where
     let mut search_mode = false;
 
     loop {
-        // Filter projects based on search query - collect indices instead of references
         let filtered_indices: Vec<usize> = projects
             .iter()
             .enumerate()
@@ -48,7 +54,6 @@ where
             .map(|(idx, _)| idx)
             .collect();
 
-        // Adjust selected index if it's out of bounds
         if selected >= filtered_indices.len() && !filtered_indices.is_empty() {
             selected = filtered_indices.len() - 1;
         }
@@ -59,94 +64,239 @@ where
         });
 
         terminal.draw(|f| {
-            let chunks = if search_mode {
+            // Main layout: Content Area + Footer
+            let main_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0),    // Content
+                    Constraint::Length(3), // Footer
+                ])
+                .split(f.area());
+
+            // Content area
+            let content_layout = if search_mode {
                 Layout::default()
-                    .constraints(
-                        [
-                            Constraint::Length(3),
-                            Constraint::Min(5),
-                            Constraint::Length(3),
-                        ]
-                        .as_ref(),
-                    )
-                    .split(f.area())
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3), // Search box
+                        Constraint::Min(5),    // Project list
+                    ])
+                    .margin(1) // Small margin around content for spacing
+                    .split(main_layout[0])
             } else {
                 Layout::default()
-                    .constraints([Constraint::Min(5), Constraint::Length(3)].as_ref())
-                    .split(f.area())
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Min(5)])
+                    .margin(1) // Small margin around content for spacing
+                    .split(main_layout[0])
             };
 
-            let mut chunk_idx = 0;
+            let mut content_idx = 0;
 
             // Search input (only if in search mode)
             if search_mode {
-                let search_input = Paragraph::new(format!("Search: {}", search_query)).block(
+                let search_text = if search_query.is_empty() {
+                    "Type to search projects...".to_string()
+                } else {
+                    search_query.clone()
+                };
+
+                let search_style = if search_query.is_empty() {
+                    Style::default()
+                        .fg(MUTED_COLOR)
+                        .add_modifier(Modifier::ITALIC)
+                } else {
+                    Style::default().fg(TEXT_COLOR)
+                };
+
+                let search_input = Paragraph::new(search_text).style(search_style).block(
                     Block::default()
-                        .title("Search Projects")
-                        .borders(Borders::ALL),
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(HIGHLIGHT_COLOR))
+                        .title(" Search Projects ") // Simplified title
+                        .title_style(
+                            Style::default()
+                                .fg(ACCENT_COLOR)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                 );
-                f.render_widget(search_input, chunks[chunk_idx]);
-                chunk_idx += 1;
+                f.render_widget(search_input, content_layout[content_idx]);
+                content_idx += 1;
             }
 
             // Project list
-            let items: Vec<ListItem> = filtered_indices
-                .iter()
-                .filter_map(|&idx| projects.get(idx))
-                .enumerate()
-                .map(|(display_idx, p)| {
-                    let original_idx = filtered_indices[display_idx];
-                    let mut line = format!("{}: {}", original_idx + 1, p.name);
-
-                    // Add node version if available
-                    if let Some(ref version) = p.node_version {
-                        line.push_str(&format!(" (Node: {})", version));
-                    }
-
-                    // Add last opened date
-                    if let Some(ts) = p.last_opened {
-                        line.push_str(&format!(
-                            " - {}",
-                            ts.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M")
-                        ));
-                    }
-
-                    ListItem::new(line)
-                })
-                .collect();
-
-            let list_title = if search_mode && !search_query.is_empty() {
-                format!(
-                    "Nodash Projects (Filtered: {}/{})",
-                    filtered_indices.len(),
-                    projects.len()
-                )
+            let items: Vec<ListItem> = if filtered_indices.is_empty() {
+                vec![ListItem::new(Line::from(vec![Span::styled(
+                    "No projects found.",
+                    Style::default()
+                        .fg(MUTED_COLOR)
+                        .add_modifier(Modifier::ITALIC),
+                )]))]
             } else {
-                "Nodash Projects".to_string()
+                filtered_indices
+                    .iter()
+                    .filter_map(|&idx| projects.get(idx))
+                    .enumerate()
+                    .map(|(display_idx, p)| {
+                        let original_idx = filtered_indices[display_idx]; // Keep original index for display numbering
+
+                        let mut spans = vec![
+                            Span::styled(
+                                format!("{}. ", original_idx + 1),
+                                Style::default().fg(MUTED_COLOR),
+                            ),
+                            Span::styled(
+                                &p.name,
+                                Style::default().fg(TEXT_COLOR).add_modifier(Modifier::BOLD),
+                            ),
+                        ];
+
+                        // Add node version
+                        if let Some(ref version) = p.node_version {
+                            spans.push(Span::styled(" (Node ", Style::default().fg(MUTED_COLOR)));
+                            spans.push(Span::styled(version, Style::default().fg(ACCENT_COLOR)));
+                            spans.push(Span::styled(")", Style::default().fg(MUTED_COLOR)));
+                        }
+
+                        // Add last opened date
+                        if let Some(ts) = p.last_opened {
+                            spans.push(Span::styled(" - ", Style::default().fg(MUTED_COLOR)));
+                            spans.push(Span::styled(
+                                ts.with_timezone(&chrono::Local)
+                                    .format("%Y-%m-%d %H:%M")
+                                    .to_string(),
+                                Style::default().fg(MUTED_COLOR),
+                            ));
+                        }
+
+                        ListItem::new(Line::from(spans))
+                    })
+                    .collect()
+            };
+
+            let list_title_text = if projects.is_empty() {
+                " Projects (No projects yet) ".to_string()
+            } else if search_mode && !search_query.is_empty() {
+                format!(" Projects ({}/{}) ", filtered_indices.len(), projects.len())
+            } else {
+                " Projects ".to_string()
             };
 
             let list = List::new(items)
-                .block(Block::default().title(list_title).borders(Borders::ALL))
-                .highlight_style(Style::default().fg(Color::Yellow).bg(Color::Blue));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(HIGHLIGHT_COLOR))
+                        .title(list_title_text)
+                        .title_style(
+                            Style::default()
+                                .fg(HIGHLIGHT_COLOR)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                )
+                .highlight_style(
+                    Style::default()
+                        .fg(Color::Black) // Text on highlight
+                        .bg(HIGHLIGHT_COLOR) // Highlighted background
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol("❯ "); // Simple, modern arrow
 
-            f.render_stateful_widget(list, chunks[chunk_idx], &mut list_state);
-            chunk_idx += 1;
+            f.render_stateful_widget(list, content_layout[content_idx], &mut list_state);
 
-            // Help text
-            let help_text = if search_mode {
-                vec![ListItem::new(
-                    "Type to search | Esc: Exit search | Enter: Open | q: Quit",
-                )]
+            // Footer with controls
+            let footer_text = if search_mode {
+                vec![
+                    Span::styled(
+                        "ESC",
+                        Style::default()
+                            .fg(HIGHLIGHT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" exit search", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "↑↓",
+                        Style::default()
+                            .fg(HIGHLIGHT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" navigate", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "ENTER",
+                        Style::default()
+                            .fg(ACCENT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" open", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "Q",
+                        Style::default()
+                            .fg(ERROR_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" quit", Style::default().fg(TEXT_COLOR)),
+                ]
             } else {
-                vec![ListItem::new(
-                    "↑/↓: Navigate | Enter: Open | a: Add | /: Search | q: Quit",
-                )]
+                vec![
+                    Span::styled(
+                        "↑↓",
+                        Style::default()
+                            .fg(HIGHLIGHT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" navigate", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "ENTER",
+                        Style::default()
+                            .fg(ACCENT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" open", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "A",
+                        Style::default()
+                            .fg(HIGHLIGHT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" add", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "/",
+                        Style::default()
+                            .fg(HIGHLIGHT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" search", Style::default().fg(TEXT_COLOR)),
+                    Span::raw(" | "),
+                    Span::styled(
+                        "Q",
+                        Style::default()
+                            .fg(ERROR_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(" quit", Style::default().fg(TEXT_COLOR)),
+                ]
             };
 
-            let help = List::new(help_text)
-                .block(Block::default().title("Controls").borders(Borders::ALL));
-
-            f.render_widget(help, chunks[chunk_idx]);
+            let footer = Paragraph::new(Line::from(footer_text))
+                .alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(MUTED_COLOR))
+                        .title(" Commands ")
+                        .title_style(
+                            Style::default()
+                                .fg(MUTED_COLOR)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                );
+            f.render_widget(footer, main_layout[1]);
         })?;
 
         if event::poll(std::time::Duration::from_millis(200))? {
@@ -162,7 +312,6 @@ where
                             if let Some(&original_idx) = filtered_indices.get(selected) {
                                 if let Some(proj) = projects.get_mut(original_idx) {
                                     open_cb(proj)?;
-                                    // No need to sort here, save_projects will handle it
                                     save_projects(projects)?;
                                     selected = 0;
                                 }
@@ -212,7 +361,6 @@ where
                             if let Some(&original_idx) = filtered_indices.get(selected) {
                                 if let Some(proj) = projects.get_mut(original_idx) {
                                     open_cb(proj)?;
-                                    // No need to sort here, save_projects will handle it
                                     save_projects(projects)?;
                                     selected = 0;
                                 }
@@ -224,6 +372,7 @@ where
                             terminal.show_cursor()?;
 
                             println!("\nAdd New Project");
+                            println!("---------------");
                             let mut name = String::new();
                             let mut path = String::new();
 
@@ -236,20 +385,26 @@ where
                             io::stdin().read_line(&mut path)?;
 
                             let project_path = PathBuf::from(path.trim());
+                            let node_version = detect_node_version(&project_path).ok();
+
                             let project = Project {
                                 name: name.trim().to_string(),
                                 path: project_path.clone(),
                                 last_opened: None,
-                                node_version: detect_node_version(&project_path).ok(),
+                                node_version: node_version.clone(),
                             };
 
                             projects.push(project);
-
-                            // No need to sort here, save_projects will handle it
                             save_projects(projects)?;
                             selected = 0;
 
-                            println!("\nProject added. Press Enter to return...");
+                            println!("\nProject added.");
+                            if let Some(version) = node_version {
+                                println!("Node version detected: {}", version);
+                            } else {
+                                println!("No .nvmrc file found.");
+                            }
+                            println!("\nPress Enter to return to dashboard...");
                             let mut dummy = String::new();
                             io::stdin().read_line(&mut dummy)?;
 
