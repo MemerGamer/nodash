@@ -21,6 +21,48 @@ Easily manage and open your most-used dev projects with a slick TUI interface.
 
 ---
 
+## ✅ Supported Terminals & Shells
+
+### 🖥️ Terminal Support
+
+When launching a project, `nodash` opens a new terminal window. Terminal detection and fallback order:
+
+**Preferred terminals:**
+
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+- [Alacritty](https://alacritty.org/)
+- [WezTerm](https://wezfurlong.org/wezterm/)
+- [Ghostty](https://ghostty.org/)
+
+**Fallbacks (in order):**
+
+1. `xterm`
+2. `gnome-terminal`
+3. `konsole`
+
+> **Note:**
+>
+> - The terminal must be available in your `PATH`.
+> - Termux and other mobile environments are **not supported**.
+> - For Kitty, WezTerm, Ghostty, and fallback terminals, `nodash` suppresses startup messages for a clean TUI launch.
+
+---
+
+### 🐚 Shell Support
+
+`nodash` works seamlessly with the following shells:
+
+- **Bash** (and other POSIX shells)
+- **Zsh**
+- **Fish**
+
+When opening a project, `nodash` will:
+
+- Automatically activate the Node.js version specified in your `.nvmrc` file.
+- Use [NVM](https://github.com/nvm-sh/nvm) if available, or fall back to [FNM](https://github.com/Schniz/fnm) if not.
+
+---
+
 ## 📥 Installation
 
 ### General GNU/Linux

@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 fn get_current_shell() -> String {
     if let Ok(shell) = env::var("SHELL") {
@@ -22,34 +22,24 @@ fn is_zsh_shell(shell: &str) -> bool {
 }
 
 fn get_terminal_emulator() -> Option<String> {
+    // Detect some popular terminals by environment
     if env::var("KITTY_WINDOW_ID").is_ok() {
         return Some("kitty".to_string());
     }
-
     if env::var("ALACRITTY_SOCKET").is_ok() || env::var("ALACRITTY_LOG").is_ok() {
         return Some("alacritty".to_string());
     }
-
     if env::var("WEZTERM_EXECUTABLE").is_ok() {
         return Some("wezterm".to_string());
     }
-
-    if env::var("TERM_PROGRAM").as_deref() == Ok("iTerm.app") {
-        return Some("iterm2".to_string());
+    if matches!(
+        env::var("TERM_PROGRAM").as_deref(),
+        Ok("Ghostty") | Ok("ghostty")
+    ) {
+        return Some("ghostty".to_string());
     }
 
-    if env::var("TERM_PROGRAM").as_deref() == Ok("Apple_Terminal") {
-        return Some("terminal".to_string());
-    }
-
-    if env::var("TMUX").is_ok() {
-        return Some("tmux".to_string());
-    }
-
-    if env::var("STY").is_ok() {
-        return Some("screen".to_string());
-    }
-
+    // No tmux/screen/Termux special handling
     None
 }
 
@@ -81,7 +71,6 @@ fn create_zsh_shim(project_path: &Path) -> io::Result<PathBuf> {
     fs::create_dir_all(&zdotdir)?;
 
     let mut zshrc = String::new();
-
     let proj = sh_escape_single_quoted(&project_path.display().to_string());
 
     zshrc.push_str(
@@ -143,11 +132,10 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
     };
 
     // Build the command string for non-zsh POSIX shells (bash, sh, etc.)
-    // NOTE: We intentionally DO NOT "exec {shell}" at the end. We start an
-    // interactive shell as a child ("{shell} -i") so we don't replace the
-    // process right after activation (avoids losing PATH in some setups).
+    // We intentionally DO NOT "exec {shell}" at the end. We start an
+    // interactive shell as a child ("{shell} -i") to avoid losing PATH.
     let nvm_command = if is_fish {
-        // fish branch (kept similar to original; fish worked fine)
+        // fish branch
         format!(
             "cd '{}' ; \
              if functions -q nvm\n  nvm use 2>/dev/null; or nvm install\n\
@@ -197,9 +185,10 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                 }
                 let mut cmd = Command::new("kitty");
                 cmd.arg("--hold").arg("--");
+                // Silence kitty noises, no more pspsps
+                cmd.stdout(Stdio::null()).stderr(Stdio::null());
 
                 if is_zsh {
-                    // Launch zsh interactive with our shim
                     if let Some(zd) = &zdotdir {
                         cmd.env("ZDOTDIR", zd);
                     }
@@ -237,6 +226,9 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                 }
                 let mut cmd = Command::new("wezterm");
                 cmd.arg("start").arg("--");
+                // Silence wezterm info/warnings
+                cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
                 if is_zsh {
                     if let Some(zd) = &zdotdir {
                         cmd.env("ZDOTDIR", zd);
@@ -247,38 +239,31 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                 }
                 cmd.spawn()?;
             }
-            "tmux" => {
-                if !command_exists("tmux") {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, "tmux not found"));
+            "ghostty" => {
+                if !command_exists("ghostty") {
+                    return Err(io::Error::new(io::ErrorKind::NotFound, "ghostty not found"));
                 }
+                let mut cmd = Command::new("ghostty");
+                // Silence ghostty info/warnings
+                cmd.stdout(Stdio::null()).stderr(Stdio::null());
 
                 if is_zsh {
-                    // Use env to inject ZDOTDIR for the new pane; start zsh -i
-                    let mut cmd = Command::new("tmux");
-                    cmd.arg("new-window").arg("-c").arg(&proj.path);
                     if let Some(zd) = &zdotdir {
-                        cmd.arg("env")
-                            .arg(format!("ZDOTDIR={}", zd.display()))
-                            .arg(&shell)
-                            .arg("-i");
-                    } else {
-                        cmd.arg(&shell).arg("-i");
+                        cmd.env("ZDOTDIR", zd);
                     }
-                    cmd.spawn()?;
+                    // Linux supports -e to run a command
+                    cmd.arg("-e").arg(&shell).arg("-i");
                 } else {
-                    // Non-zsh path: run the shell with our activation command
-                    let mut cmd = Command::new("tmux");
-                    cmd.arg("new-window")
-                        .arg("-c")
-                        .arg(&proj.path)
+                    cmd.arg("-e")
                         .arg(&shell)
                         .arg("-i")
                         .arg("-c")
                         .arg(&nvm_command);
-                    cmd.spawn()?;
                 }
+                cmd.spawn()?;
             }
             _ => {
+                // Unknown detected terminal; try generic "-e"
                 if !command_exists(&terminal) {
                     return Err(io::Error::new(
                         io::ErrorKind::NotFound,
@@ -286,7 +271,9 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                     ));
                 }
                 let mut cmd = Command::new(&terminal);
-                // Try a generic "-e" style; many terminals accept it.
+                // Silence generic terminal noise
+                cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
                 if is_zsh {
                     if let Some(zd) = &zdotdir {
                         cmd.env("ZDOTDIR", zd);
@@ -303,12 +290,14 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
             }
         },
         None => {
+            // Fallback order:
+            // 1) xterm
+            // 2) gnome-terminal
+            // 3) konsole
             let terminals = [
-                ("kitty", vec!["--hold", "--"]),
-                ("alacritty", vec!["-e"]),
-                ("wezterm", vec!["start", "--"]),
-                ("gnome-terminal", vec!["--"]),
                 ("xterm", vec!["-e"]),
+                ("gnome-terminal", vec!["--"]),
+                ("konsole", vec!["-e"]),
             ];
 
             let mut found = false;
@@ -318,6 +307,9 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                     for arg in args {
                         cmd.arg(arg);
                     }
+                    // Silence fallback terminal noise
+                    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
                     if is_zsh {
                         if let Some(zd) = &zdotdir {
                             cmd.env("ZDOTDIR", zd);
