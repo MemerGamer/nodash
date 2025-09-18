@@ -3,7 +3,7 @@
 set -e
 
 REPO="MemerGamer/nodash"
-VERSION="v1.0.4"
+VERSION="v1.0.5"
 FILENAME="nodash-linux-$VERSION"
 URL="https://github.com/$REPO/releases/download/$VERSION/$FILENAME"
 
