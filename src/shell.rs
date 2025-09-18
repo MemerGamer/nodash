@@ -81,17 +81,26 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
             shell
         )
     } else {
-        // Bash/Zsh syntax with nvm
+        // Bash/Zsh: robust nvm init with fallbacks, then use .nvmrc or install
         format!(
-            "cd '{}' && if [ -s \"$NVM_DIR/nvm.sh\" ]; then \
-            source \"$NVM_DIR/nvm.sh\" && (nvm use 2>/dev/null || nvm install); \
+            "cd '{}' && \
+            export NVM_DIR=\"${{NVM_DIR:-$HOME/.nvm}}\"; \
+            if [ -s \"$NVM_DIR/nvm.sh\" ]; then \
+                . \"$NVM_DIR/nvm.sh\"; \
+            elif [ -s /usr/share/nvm/init-nvm.sh ]; then \
+                . /usr/share/nvm/init-nvm.sh; \
+            elif [ -s \"$HOME/.config/nvm/nvm.sh\" ]; then \
+                . \"$HOME/.config/nvm/nvm.sh\"; \
+            fi; \
+            if command -v nvm >/dev/null 2>&1; then \
+                (nvm use 2>/dev/null || nvm install); \
             elif command -v fnm >/dev/null 2>&1; then \
-            eval \"$(fnm env)\" && (fnm use 2>/dev/null || fnm install); \
+                eval \"$(fnm env)\" && (fnm use 2>/dev/null || fnm install); \
             elif command -v node >/dev/null 2>&1; then \
-            echo 'Node.js available'; \
+                echo 'Node.js available'; \
             else \
-            echo 'No Node.js version manager found'; \
-            fi && exec {}",
+                echo 'No Node.js version manager found'; \
+            fi && exec {} -i",
             proj.path.display(),
             shell
         )
@@ -105,6 +114,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                         .arg("--hold")
                         .arg("--")
                         .arg(&shell)
+                        .arg("-i")
                         .arg("-c")
                         .arg(&nvm_command)
                         .spawn()?;
@@ -117,6 +127,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                     Command::new("alacritty")
                         .arg("-e")
                         .arg(&shell)
+                        .arg("-i")
                         .arg("-c")
                         .arg(&nvm_command)
                         .spawn()?;
@@ -133,6 +144,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                         .arg("start")
                         .arg("--")
                         .arg(&shell)
+                        .arg("-i")
                         .arg("-c")
                         .arg(&nvm_command)
                         .spawn()?;
@@ -161,14 +173,23 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                         )
                     } else {
                         format!(
-                            "cd '{}' && if [ -s \"$NVM_DIR/nvm.sh\" ]; then \
-                            source \"$NVM_DIR/nvm.sh\" && (nvm use 2>/dev/null || nvm install); \
+                            "cd '{}' && \
+                            export NVM_DIR=\"${{NVM_DIR:-$HOME/.nvm}}\"; \
+                            if [ -s \"$NVM_DIR/nvm.sh\" ]; then \
+                                . \"$NVM_DIR/nvm.sh\"; \
+                            elif [ -s /usr/share/nvm/init-nvm.sh ]; then \
+                                . /usr/share/nvm/init-nvm.sh; \
+                            elif [ -s \"$HOME/.config/nvm/nvm.sh\" ]; then \
+                                . \"$HOME/.config/nvm/nvm.sh\"; \
+                            fi; \
+                            if command -v nvm >/dev/null 2>&1; then \
+                                (nvm use 2>/dev/null || nvm install); \
                             elif command -v fnm >/dev/null 2>&1; then \
-                            eval \"$(fnm env)\" && (fnm use 2>/dev/null || fnm install); \
+                                eval \"$(fnm env)\" && (fnm use 2>/dev/null || fnm install); \
                             elif command -v node >/dev/null 2>&1; then \
-                            echo 'Node.js available'; \
+                                echo 'Node.js available'; \
                             else \
-                            echo 'No Node.js version manager found'; \
+                                echo 'No Node.js version manager found'; \
                             fi",
                             proj.path.display()
                         )
@@ -178,6 +199,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                         .arg("-c")
                         .arg(&proj.path)
                         .arg(&shell)
+                        .arg("-i")
                         .arg("-c")
                         .arg(&tmux_command)
                         .spawn()?;
@@ -190,6 +212,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                     Command::new(&terminal)
                         .arg("-e")
                         .arg(&shell)
+                        .arg("-i")
                         .arg("-c")
                         .arg(&nvm_command)
                         .spawn()?;
@@ -217,7 +240,7 @@ pub fn open_project(proj: &mut Project) -> io::Result<()> {
                     for arg in args {
                         cmd.arg(arg);
                     }
-                    cmd.arg(&shell).arg("-c").arg(&nvm_command).spawn()?;
+                    cmd.arg(&shell).arg("-i").arg("-c").arg(&nvm_command).spawn()?;
                     found = true;
                     break;
                 }
