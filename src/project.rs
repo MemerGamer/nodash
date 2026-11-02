@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{env, io};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -11,7 +11,7 @@ pub struct Project {
     pub node_version: Option<String>,
 }
 
-pub fn detect_node_version(path: &PathBuf) -> io::Result<String> {
+pub fn detect_node_version(path: &Path) -> io::Result<String> {
     // Check if there's a .nvmrc file
     let nvmrc_path = path.join(".nvmrc");
     if nvmrc_path.exists() {
@@ -29,7 +29,7 @@ pub fn detect_node_version(path: &PathBuf) -> io::Result<String> {
     }
 }
 
-fn sort_projects(projects: &mut Vec<Project>) {
+fn sort_projects(projects: &mut [Project]) {
     projects.sort_by(|a, b| match (a.last_opened, b.last_opened) {
         (Some(a_date), Some(b_date)) => b_date.cmp(&a_date),
         (Some(_), None) => std::cmp::Ordering::Less,

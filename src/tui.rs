@@ -299,121 +299,115 @@ where
             f.render_widget(footer, main_layout[1]);
         })?;
 
-        if event::poll(std::time::Duration::from_millis(200))? {
-            if let Event::Key(key) = event::read()? {
-                if search_mode {
-                    match key.code {
-                        KeyCode::Esc => {
-                            search_mode = false;
-                            search_query.clear();
-                            selected = 0;
-                        }
-                        KeyCode::Enter => {
-                            if let Some(&original_idx) = filtered_indices.get(selected) {
-                                if let Some(proj) = projects.get_mut(original_idx) {
-                                    open_cb(proj)?;
-                                    save_projects(projects)?;
-                                    selected = 0;
-                                }
-                            }
-                        }
-                        KeyCode::Backspace => {
-                            search_query.pop();
-                            selected = 0;
-                        }
-                        KeyCode::Down => {
-                            if !filtered_indices.is_empty() {
-                                selected =
-                                    (selected + 1).min(filtered_indices.len().saturating_sub(1));
-                            }
-                        }
-                        KeyCode::Up => {
-                            if selected > 0 {
-                                selected -= 1;
-                            }
-                        }
-                        KeyCode::Char(c) => {
-                            search_query.push(c);
-                            selected = 0;
-                        }
-                        _ => {}
+        if event::poll(std::time::Duration::from_millis(200))?
+            && let Event::Key(key) = event::read()?
+        {
+            if search_mode {
+                match key.code {
+                    KeyCode::Esc => {
+                        search_mode = false;
+                        search_query.clear();
+                        selected = 0;
                     }
-                } else {
-                    match key.code {
-                        KeyCode::Char('q') => break,
-                        KeyCode::Char('/') => {
-                            search_mode = true;
-                            search_query.clear();
-                            selected = 0;
-                        }
-                        KeyCode::Down => {
-                            if !filtered_indices.is_empty() {
-                                selected =
-                                    (selected + 1).min(filtered_indices.len().saturating_sub(1));
-                            }
-                        }
-                        KeyCode::Up => {
-                            if selected > 0 {
-                                selected -= 1;
-                            }
-                        }
-                        KeyCode::Enter => {
-                            if let Some(&original_idx) = filtered_indices.get(selected) {
-                                if let Some(proj) = projects.get_mut(original_idx) {
-                                    open_cb(proj)?;
-                                    save_projects(projects)?;
-                                    selected = 0;
-                                }
-                            }
-                        }
-                        KeyCode::Char('a') => {
-                            terminal::disable_raw_mode()?;
-                            execute!(terminal.backend_mut(), terminal::LeaveAlternateScreen)?;
-                            terminal.show_cursor()?;
-
-                            println!("\nAdd New Project");
-                            println!("---------------");
-                            let mut name = String::new();
-                            let mut path = String::new();
-
-                            print!("Project name: ");
-                            io::stdout().flush()?;
-                            io::stdin().read_line(&mut name)?;
-
-                            print!("Project path: ");
-                            io::stdout().flush()?;
-                            io::stdin().read_line(&mut path)?;
-
-                            let project_path = PathBuf::from(path.trim());
-                            let node_version = detect_node_version(&project_path).ok();
-
-                            let project = Project {
-                                name: name.trim().to_string(),
-                                path: project_path.clone(),
-                                last_opened: None,
-                                node_version: node_version.clone(),
-                            };
-
-                            projects.push(project);
+                    KeyCode::Enter => {
+                        if let Some(&original_idx) = filtered_indices.get(selected)
+                            && let Some(proj) = projects.get_mut(original_idx)
+                        {
+                            open_cb(proj)?;
                             save_projects(projects)?;
                             selected = 0;
-
-                            println!("\nProject added.");
-                            if let Some(version) = node_version {
-                                println!("Node version detected: {}", version);
-                            } else {
-                                println!("No .nvmrc file found.");
-                            }
-                            println!("\nPress Enter to return to dashboard...");
-                            let mut dummy = String::new();
-                            io::stdin().read_line(&mut dummy)?;
-
-                            terminal.clear()?;
-                            execute!(terminal.backend_mut(), terminal::EnterAlternateScreen)?;
-                            terminal::enable_raw_mode()?;
                         }
-                        _ => {}
                     }
+                    KeyCode::Backspace => {
+                        search_query.pop();
+                        selected = 0;
+                    }
+                    KeyCode::Down => {
+                        if !filtered_indices.is_empty() {
+                            selected = (selected + 1).min(filtered_indices.len().saturating_sub(1));
+                        }
+                    }
+                    KeyCode::Up => {
+                        selected = selected.saturating_sub(1);
+                    }
+                    KeyCode::Char(c) => {
+                        search_query.push(c);
+                        selected = 0;
+                    }
+                    _ => {}
+                }
+            } else {
+                match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Char('/') => {
+                        search_mode = true;
+                        search_query.clear();
+                        selected = 0;
+                    }
+                    KeyCode::Down => {
+                        if !filtered_indices.is_empty() {
+                            selected = (selected + 1).min(filtered_indices.len().saturating_sub(1));
+                        }
+                    }
+                    KeyCode::Up => {
+                        selected = selected.saturating_sub(1);
+                    }
+                    KeyCode::Enter => {
+                        if let Some(&original_idx) = filtered_indices.get(selected)
+                            && let Some(proj) = projects.get_mut(original_idx)
+                        {
+                            open_cb(proj)?;
+                            save_projects(projects)?;
+                            selected = 0;
+                        }
+                    }
+                    KeyCode::Char('a') => {
+                        terminal::disable_raw_mode()?;
+                        execute!(terminal.backend_mut(), terminal::LeaveAlternateScreen)?;
+                        terminal.show_cursor()?;
+
+                        println!("\nAdd New Project");
+                        println!("---------------");
+                        let mut name = String::new();
+                        let mut path = String::new();
+
+                        print!("Project name: ");
+                        io::stdout().flush()?;
+                        io::stdin().read_line(&mut name)?;
+
+                        print!("Project path: ");
+                        io::stdout().flush()?;
+                        io::stdin().read_line(&mut path)?;
+
+                        let project_path = PathBuf::from(path.trim());
+                        let node_version = detect_node_version(&project_path).ok();
+
+                        let project = Project {
+                            name: name.trim().to_string(),
+                            path: project_path.clone(),
+                            last_opened: None,
+                            node_version: node_version.clone(),
+                        };
+
+                        projects.push(project);
+                        save_projects(projects)?;
+                        selected = 0;
+
+                        println!("\nProject added.");
+                        if let Some(version) = node_version {
+                            println!("Node version detected: {}", version);
+                        } else {
+                            println!("No .nvmrc file found.");
+                        }
+                        println!("\nPress Enter to return to dashboard...");
+                        let mut dummy = String::new();
+                        io::stdin().read_line(&mut dummy)?;
+
+                        terminal.clear()?;
+                        execute!(terminal.backend_mut(), terminal::EnterAlternateScreen)?;
+                        terminal::enable_raw_mode()?;
+                    }
+                    _ => {}
                 }
             }
         }

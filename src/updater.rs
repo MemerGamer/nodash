@@ -1,9 +1,9 @@
+use serde::Deserialize;
 use std::env;
 use std::fs;
 use std::io::{self};
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
-use serde::Deserialize;
 
 use crate::version::VERSION;
 #[derive(Deserialize)]
@@ -27,18 +27,21 @@ pub fn check_for_update() -> io::Result<()> {
     Ok(())
 }
 
-
 fn get_latest_release_version() -> io::Result<String> {
     let output = Command::new("curl")
-        .args(&["-s", &format!("https://api.github.com/repos/{}/releases/latest", REPO)])
+        .args([
+            "-s",
+            &format!("https://api.github.com/repos/{}/releases/latest", REPO),
+        ])
         .output()?;
     if !output.status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "Failed to fetch release info"));
+        return Err(io::Error::other("Failed to fetch release info"));
     }
 
     let release: Release = serde_json::from_slice(&output.stdout)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("JSON parse error: {}", e)))?;
-    let version = release.tag_name
+        .map_err(|e| io::Error::other(format!("JSON parse error: {}", e)))?;
+    let version = release
+        .tag_name
         .strip_prefix('v')
         .map(|s| s.to_string())
         .unwrap_or(release.tag_name);
@@ -46,12 +49,13 @@ fn get_latest_release_version() -> io::Result<String> {
     Ok(version)
 }
 
-
 fn download_and_replace_binary(version: &str) -> io::Result<()> {
     let version = version.trim();
     let url = format!(
         "https://github.com/{}/releases/download/v{}/nodash-linux-v{}",
-        REPO.trim(), version, version
+        REPO.trim(),
+        version,
+        version
     );
 
     // Debug output to verify the URL is correct
@@ -60,13 +64,13 @@ fn download_and_replace_binary(version: &str) -> io::Result<()> {
     let tmp_path = env::temp_dir().join("nodash-update");
 
     let status = Command::new("curl")
-        .args(&["-L", "-o"])
+        .args(["-L", "-o"])
         .arg(&tmp_path)
         .arg(&url)
         .status()?;
 
     if !status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "Download failed"));
+        return Err(io::Error::other("Download failed"));
     }
 
     println!("🔐 Making binary executable...");
